@@ -58,11 +58,11 @@ Les résultats suggèrent que le **remplacement de NaCl ou CaCl₂ par un sel co
 ## 👨‍🎓 Auteurs
 
 Projet réalisé par :
-- Janikson Garcia Brito
 - Aymane Mimoun
 - Alexandre Combeau
-- Hajar Lamtaii
 - Jaad Belhouari
+- Janikson Garcia Brito
+- Hajar Lamtaii
 
 M2 Data Science, Université Paris-Saclay — Mars 2024
 
