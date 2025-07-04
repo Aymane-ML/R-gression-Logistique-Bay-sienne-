@@ -1,0 +1,100 @@
+N0,Nsurv,conc,Salt
+9,9,1,NaCl
+4,4,2,NaCl
+5,5,4,NaCl
+6,6,8,NaCl
+9,7,16,NaCl
+4,4,32,NaCl
+9,2,64,NaCl
+10,0,128,NaCl
+7,0,256,NaCl
+7,0,512,NaCl
+2,0,1024,NaCl
+4,4,1,NaCl
+4,3,2,NaCl
+7,7,4,NaCl
+5,5,8,NaCl
+8,6,16,NaCl
+6,1,32,NaCl
+7,0,64,NaCl
+13,1,128,NaCl
+5,0,256,NaCl
+8,0,512,NaCl
+10,0,1024,NaCl
+4,4,1,NaCl
+7,7,2,NaCl
+3,3,4,NaCl
+4,4,8,NaCl
+5,3,16,NaCl
+1,0,32,NaCl
+5,1,64,NaCl
+9,0,128,NaCl
+5,0,256,NaCl
+6,0,512,NaCl
+6,0,1024,NaCl
+6,6,1,CaCl2
+4,4,2,CaCl2
+8,8,4,CaCl2
+7,6,8,CaCl2
+8,6,16,CaCl2
+3,1,32,CaCl2
+7,1,64,CaCl2
+5,2,128,CaCl2
+8,0,256,CaCl2
+7,0,512,CaCl2
+8,0,1024,CaCl2
+6,6,1,CaCl2
+6,6,2,CaCl2
+8,8,4,CaCl2
+2,2,8,CaCl2
+6,6,16,CaCl2
+7,4,32,CaCl2
+7,0,64,CaCl2
+6,1,128,CaCl2
+9,1,256,CaCl2
+5,0,512,CaCl2
+4,0,1024,CaCl2
+3,3,1,CaCl2
+3,3,2,CaCl2
+5,5,4,CaCl2
+6,6,8,CaCl2
+7,7,16,CaCl2
+5,1,32,CaCl2
+9,0,64,CaCl2
+5,0,128,CaCl2
+6,1,256,CaCl2
+5,0,512,CaCl2
+7,1,1024,CaCl2
+4,4,1,Commercial Salt
+6,6,2,Commercial Salt
+8,8,4,Commercial Salt
+3,3,8,Commercial Salt
+9,8,16,Commercial Salt
+5,4,32,Commercial Salt
+8,2,64,Commercial Salt
+5,1,128,Commercial Salt
+5,1,256,Commercial Salt
+6,0,512,Commercial Salt
+9,0,1024,Commercial Salt
+9,9,1,Commercial Salt
+5,5,2,Commercial Salt
+8,8,4,Commercial Salt
+11,11,8,Commercial Salt
+5,4,16,Commercial Salt
+7,5,32,Commercial Salt
+5,0,64,Commercial Salt
+5,1,128,Commercial Salt
+8,0,256,Commercial Salt
+4,0,512,Commercial Salt
+7,0,1024,Commercial Salt
+3,3,1,Commercial Salt
+4,4,2,Commercial Salt
+3,3,4,Commercial Salt
+4,4,8,Commercial Salt
+2,2,16,Commercial Salt
+7,5,32,Commercial Salt
+9,0,64,Commercial Salt
+8,2,128,Commercial Salt
+8,0,256,Commercial Salt
+6,0,512,Commercial Salt
+5,0,1024,Commercial Salt

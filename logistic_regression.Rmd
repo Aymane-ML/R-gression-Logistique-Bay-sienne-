@@ -1,0 +1,450 @@
+---
+title: "Bayesien Logistic Regression"
+author: "Aymane Mimoun"
+date: "2025-03-28"
+output: pdf_document
+---
+
+# Loading Libraries
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+
+# Loading Data
+```{r}
+df = read_csv("mayflies_salt_survival.csv")
+head(df)
+```
+
+# Analaysis Descriptive Data
+```{r}
+df<- df %>%
+  mutate(surv_rate = Nsurv/N0)
+head(df)
+```
+
+```{r}
+plot = ggplot(df, aes(x = conc, y = surv_rate, color = Salt)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  scale_x_log10() +
+  theme_minimal() +
+  labs(
+    x = "Concentration de sel (g/L)",
+    y = "Taux de survie (Nsurv / N0)",
+    color = "Type de sel"         
+  )
+
+ggsave("survie_larves_plot.png", plot = plot, width = 6, height = 3, dpi = 300)
+```
+
+
+```{r}
+df$Salt <- as.factor(df$Salt)
+str(df)
+```
+
+## Structure du modèle
+Régression logistique
+$$P(survie = 1) = \frac{1}{1 + \exp{-(\alpha + \beta * conc + \gamma_1 * X_{NaCl} + \gamma_2 * X_{CaCl2} + \gamma_3 * X_{Commercial})}}$$
+## Transformation des variables binaires
+```{r}
+df$NaCl = ifelse(df$Salt == "NaCl", 1, 0)
+df$CaCl2 = ifelse(df$Salt == "CaCl2", 1, 0)
+df$Commercial = ifelse(df$Salt == "Commercial Salt", 1, 0)
+head(df)
+```
+
+## Modèle Stan
+
+```{r}
+library(StanHeaders)
+library(rstan)
+
+df_model = list(
+  N0 = df$N0,
+  Nsurv = df$Nsurv,
+  conc = df$conc,
+  NaCl = df$NaCl,
+  CaCl2 = df$CaCl2,
+  Commercial = df$Commercial,
+  length_N0 = length(df$N0)
+)
+
+model_code = "
+data{
+  int<lower=1> length_N0;
+  int<lower=0, upper=1> NaCl[length_N0]; // Indicateur NaCl
+  int<lower=0, upper=1> CaCl2[length_N0]; // Indicateur CaCl2
+  int<lower=0, upper=1> Commercial[length_N0]; // Indicateur CommercialSalt
+  int N0[length_N0];
+  int Nsurv[length_N0];
+  real conc[length_N0];  
+}
+
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma_gamma; // Ecart type des effets de sel
+  vector[3] gamma_salt; // Vecteur pour les effets de chaque type de sel
+}
+
+model{
+  alpha ~ lognormal(log(6), 1);
+  beta ~ normal(0, 5);
+  sigma_gamma ~ cauchy(0, 5); // Prior positif sur la dispersion
+  gamma_salt ~ normal(0, sigma_gamma); // Effets aléatoires des sels
+  
+  for(i in 1:length_N0) {
+    real eta = alpha + beta * log(conc[i])
+                     + gamma_salt[1] * NaCl[i]  // Effet de NaCl
+                     + gamma_salt[2] * CaCl2[i] // Effet de CaCl2
+                     + gamma_salt[3] * Commercial[i]; // Effet de Commercial
+    Nsurv[i] ~ binomial_logit(N0[i], eta); 
+  }
+}
+"
+```
+
+## MCMC
+```{r}
+fit <- stan(model_code = model_code, 
+            data = df_model, 
+            chains = 4, 
+            iter = 4000, 
+            warmup = 2000, 
+            cores = 4)
+
+print(fit)
+```
+
+```{r}
+library(bayesplot)
+mcmc_hist(fit, pars = c("alpha", "beta", "gamma_salt[1]", "gamma_salt[2]", "gamma_salt[3]"))
+```
+
+
+## Convergence MCMC
+```{r}
+png("traceplot_gamma.png", width = 6, height = 3, units = "in", res = 300)
+traceplot(fit, pars = c("gamma_salt[1]", "gamma_salt[2]", "gamma_salt[3]"))
+dev.off() 
+```
+```{r}
+png("traceplot.png", width = 6, height = 3, units = "in", res = 300)
+traceplot(fit, pars = c("alpha", "beta"))  # Afficher le graphique dans le fichier
+dev.off() 
+
+```
+
+
+```{r}
+summary(fit)$summary[, "Rhat"]
+```
+
+## Fake Data Check
+
+```{r}
+set.seed(123) 
+n_sim = 100
+alpha_sim = 7.10
+beta_sim = -1.93
+gamma_salt_sim = c(-0.62, -0.24, 0.01)
+sigma_gamma_sim = 0.97
+
+conc_sim <- 2^(sample(0:10, n_sim, replace = TRUE)) 
+Salt_type_sim = sample(c("NaCl", "CaCl2", "Commercial"), n_sim, replace = TRUE)
+
+NaCl_sim = ifelse(Salt_type_sim == "NaCl", 1, 0)
+CaCl2_sim = ifelse(Salt_type_sim == "CaCl2", 1, 0)
+Commercial_sim = ifelse(Salt_type_sim == "Commercial", 1, 0)
+
+eta_sim = alpha_sim + beta_sim * log(conc_sim) + 
+          gamma_salt_sim[1] * NaCl_sim + 
+          gamma_salt_sim[2] * CaCl2_sim + 
+          gamma_salt_sim[3] * Commercial_sim
+
+p_survival_sim = 1 / (1 + exp(-eta_sim))
+N0_sim = rep(100, n_sim)
+Nsurv_sim = rbinom(n_sim, N0_sim, p_survival_sim)
+
+simulated_data = data.frame(N0 = N0_sim, Nsurv = Nsurv_sim, conc = conc_sim,
+                            NaCl = NaCl_sim, CaCl2 = CaCl2_sim, Commercial = Commercial_sim)
+
+ggplot(simulated_data, aes(x = conc, y = Nsurv / N0)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  scale_x_log10() +
+  theme_minimal() +
+  labs(title = "Simulated Survival Data", x = "Salt Concentration (log scale)", y = "Survival Rate")
+
+```
+
+```{r}
+simulated_data_model <- list(
+  N0 = simulated_data$N0,
+  Nsurv = simulated_data$Nsurv,
+  conc = simulated_data$conc,
+  NaCl = simulated_data$NaCl,
+  CaCl2 = simulated_data$CaCl2,
+  Commercial = simulated_data$Commercial,
+  length_N0 = n_sim
+)
+```
+
+```{r}
+fit_fake_logistic <- stan(
+  model_code = model_code,  # Ton modèle Stan
+  data = simulated_data_model,
+  chains = 4,  # Nombre de chaînes MCMC
+  iter = 8000,  # Nombre total d'itérations
+  warmup = 4000,  # Nombre d'itérations de burn-in
+  cores = 4  # Nombre de cœurs pour les calculs parallèles
+)
+
+```
+
+```{r}
+print(fit_fake_logistic)
+
+```
+
+```{r}
+traceplot(fit_fake_logistic, pars = c("alpha", "beta", "gamma_salt[1]", "gamma_salt[2]", "gamma_salt[3]", "sigma_gamma"))
+
+```
+```{r}
+# Résumé des résultats du modèle
+summary(fit)$summary[,"mean"]
+```
+## Are all parameters necessary ?
+
+```{r}
+# Modification du modèle sans le sel Commercial
+model_code_without_commercial = "
+data{
+  int<lower=1> length_N0;
+  int<lower=0, upper=1> NaCl[length_N0]; // Indicateur NaCl
+  int<lower=0, upper=1> CaCl2[length_N0]; // Indicateur CaCl2
+  int N0[length_N0];
+  int Nsurv[length_N0];
+  real conc[length_N0];  
+}
+
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma_gamma; // Ecart type des effets de sel
+  vector[2] gamma_salt; // Vecteur pour les effets de NaCl et CaCl2
+}
+
+model{
+  alpha ~ lognormal(log(6), 1);
+  beta ~ normal(0, 5);
+  sigma_gamma ~ cauchy(0, 5); // Prior positif sur la dispersion
+  gamma_salt ~ normal(0, sigma_gamma); // Effets aléatoires des sels
+  
+  for(i in 1:length_N0) {
+    real eta = alpha + beta * log(conc[i])
+                     + gamma_salt[1] * NaCl[i]  // Effet de NaCl
+                     + gamma_salt[2] * CaCl2[i]; // Effet de CaCl2
+    Nsurv[i] ~ binomial_logit(N0[i], eta); 
+  }
+}
+"
+
+fit_without_commercial <- stan(
+  model_code = model_code_without_commercial,
+  data = df_model,
+  chains = 4,
+  iter = 4000,
+  warmup = 2000,
+  cores = 4
+)
+
+print(fit_without_commercial)
+
+
+```
+```{r}
+traceplot(fit_without_commercial, pars = c("gamma_salt[1]", "gamma_salt[2]"))
+```
+
+```{r}
+# Histogrammes des distributions a posteriori pour les principaux paramètres
+library(bayesplot)
+mcmc_hist(fit_without_commercial, pars = c("alpha", "beta", "gamma_salt[1]", "gamma_salt[2]", "sigma_gamma"))
+
+```
+
+
+```{r}
+log_lik_with_commercial <- extract(fit)$lp__
+log_lik_without_commercial <- extract(fit_without_commercial)$lp__
+log_lik_data <- data.frame(
+  LogLikelihood = c(log_lik_with_commercial, log_lik_without_commercial),
+  Model = rep(c("Avec Commercial", "Sans Commercial"), each = length(log_lik_with_commercial))
+)
+log_lik_data
+```
+```{r}
+ggplot(log_lik_data, aes(x = LogLikelihood, fill = Model)) +
+  geom_density(alpha = 0.6) +
+  labs(
+    title = "Comparaison de la log-vraisemblance",
+    x = "Log-vraisemblance",
+    y = "Densité",
+    fill = "Modèle"
+  ) +
+  theme_minimal()
+```
+```{r}
+num_params_with_commercial <- 5
+num_params_without_commercial <- 4
+log_lik_avg_with_commercial <- mean(log_lik_with_commercial)
+log_lik_avg_without_commercial <- mean(log_lik_without_commercial)
+```
+
+
+```{r}
+AIC_with_commercial <- -2 * log_lik_avg_with_commercial + 2 * num_params_with_commercial
+AIC_without_commercial <- -2 * log_lik_avg_without_commercial + 2 * num_params_without_commercial
+
+# Afficher les résultats
+AIC_with_commercial
+AIC_without_commercial
+```
+
+
+```{r}
+# Créer un vecteur des AICs des deux modèles
+AIC_values <- c(AIC_with_commercial, AIC_without_commercial)
+
+# Noms des modèles
+model_names <- c("Avec Commercial", "Sans Commercial")
+
+# Créer un barplot des AICs
+barplot(AIC_values,
+        names.arg = model_names,
+        col = c("lightblue", "lightgreen"),
+        main = "Comparaison des AICs des Modèles",
+        ylab = "AIC",
+        ylim = c(min(AIC_values) - 10, max(AIC_values) + 10),
+        border = "white")
+
+# Ajouter une ligne horizontale à AIC minimal pour visualiser la meilleure performance
+abline(h = min(AIC_values), col = "red", lwd = 2, lty = 2)
+
+```
+
+```{r}
+fit_summary_with_commercial <- summary(fit)$summary
+
+# Extraire le résumé du modèle sans Commercial
+fit_summary_without_commercial <- summary(fit_without_commercial)$summary
+
+# Calculer les résidus du modèle avec Commercial
+residuals_with_commercial <- df$Nsurv / df$N0 - plogis(
+  fit_summary_with_commercial[1, "mean"] + 
+  fit_summary_with_commercial[2, "mean"] * log(df$conc) + 
+  fit_summary_with_commercial[3, "mean"] * df$NaCl + 
+  fit_summary_with_commercial[4, "mean"] * df$CaCl2 + 
+  fit_summary_with_commercial[5, "mean"] * df$Commercial
+)
+
+# Calculer les résidus du modèle sans Commercial
+residuals_without_commercial <- df$Nsurv / df$N0 - plogis(
+  fit_summary_without_commercial[1, "mean"] + 
+  fit_summary_without_commercial[2, "mean"] * log(df$conc) + 
+  fit_summary_without_commercial[3, "mean"] * df$NaCl + 
+  fit_summary_without_commercial[4, "mean"] * df$CaCl2
+)
+
+residuals_data <- data.frame(
+  conc = rep(df$conc, 2),  # Répéter la concentration pour les deux modèles
+  residuals = c(residuals_with_commercial, residuals_without_commercial),
+  model = rep(c("Avec Commercial", "Sans Commercial"), each = length(df$conc))
+)
+
+# Tracer les résidus avec ggplot2
+ggplot(residuals_data, aes(x = conc, y = residuals, color = model)) +
+  geom_point() + 
+  geom_smooth(method = "loess", se = FALSE, linetype = "dashed") + 
+  scale_x_log10() +  # Pour log-transformer la concentration
+  labs(title = "Comparaison des Résidus : Modèle avec et sans Commercial",
+       x = "Concentration de sel (g/L)",
+       y = "Résidus",
+       color = "Modèle") +
+  theme_minimal()
+
+```
+
+```{r}
+fit_summary_log_logistic <- summary(fit_log_logistic)$summary
+
+residuals_log_logistic <- log_logistic_data$Nsurv / log_logistic_data$N0 - plogis(
+  fit_summary_log_logistic[1, "mean"] + 
+  fit_summary_log_logistic[2, "mean"] * log(log_logistic_data$conc) + 
+  fit_summary_log_logistic[3, "mean"] * log_logistic_data$NaCl + 
+  fit_summary_log_logistic[4, "mean"] * log_logistic_data$CaCl2 +
+  fit_summary_log_logistic[4, "mean"] * log_logistic_data$Commercial
+)
+
+residuals_data <- data.frame(
+  conc = rep(df$conc, 2),  # Répéter la concentration pour les deux modèles
+  residuals = c(residuals_with_commercial, residuals_log_logistic),
+  model = rep(c("Avec Commercial", "Sans Commercial"), each = length(df$conc))
+)
+
+# Tracer les résidus avec ggplot2
+ggplot(residuals_data, aes(x = conc, y = residuals, color = model)) +
+  geom_point() + 
+  geom_smooth(method = "loess", se = FALSE, linetype = "dashed") + 
+  scale_x_log10() +  # Pour log-transformer la concentration
+  labs(title = "Comparaison des Résidus : Modèle avec et sans Commercial",
+       x = "Concentration de sel (g/L)",
+       y = "Résidus",
+       color = "Modèle") +
+  theme_minimal()
+
+```
+
+
+```{r}
+# Extraire le résumé du modèle log-logistique
+fit_summary_log_logistic <- summary(fit_log_logistic)$summary
+
+# Calculer les résidus du modèle log-logistique
+residuals_log_logistic <- df$Nsurv / df$N0 - plogis(
+  fit_summary_log_logistic[1, "mean"] + 
+  fit_summary_log_logistic[2, "mean"] * log(df$conc) + 
+  fit_summary_log_logistic[3, "mean"] * df$NaCl + 
+  fit_summary_log_logistic[4, "mean"] * df$CaCl2 + 
+  fit_summary_log_logistic[5, "mean"] * df$Commercial
+)
+# Créer un data frame pour les résidus des deux modèles
+residuals_data <- data.frame(
+  conc = rep(df$conc, 2),  # Répéter la concentration pour les deux modèles
+  residuals = c(residuals_with_commercial, residuals_log_logistic),
+  model = rep(c("Logistique", "Log-logistique"), each = length(df$conc))
+)
+
+# Tracer les résidus avec ggplot2
+plot2 = ggplot(residuals_data, aes(x = conc, y = residuals, color = model)) +
+  geom_point() + 
+  geom_smooth(method = "loess", se = FALSE, linetype = "dashed") + 
+  scale_x_log10() +  # Log-transformer la concentration
+  labs(title = "Comparaison des Résidus : Régression Logistique vs Modèle Log-Logistique",
+       x = "Concentration de sel (g/L)",
+       y = "Résidus",
+       color = "Modèle") +
+  theme_minimal()
+
+ggsave("résidus_log_logistic_reg_logistic.png", plot = plot2, width = 10, height = 6, dpi = 300)
+```
+
+
+
+
